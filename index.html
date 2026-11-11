@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07080a" />
+    <script>
+      // Modo antes del primer pintado: el elegido por la persona o, si no hay, el del sistema.
+      (function () {
+        var m = 'dark';
+        try {
+          var s = localStorage.getItem('shongo-rag-theme');
+          m = s === 'light' || s === 'dark' ? s : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        } catch (e) {}
+        document.documentElement.dataset.theme = m;
+        document.documentElement.style.colorScheme = m;
+      })();
+    </script>
+    <title>Cómo funciona un RAG, paso a paso · Shongo</title>
+    <meta name="description" content="Explicación interactiva de RAG: ingesta, embeddings, base de datos, proximidad y respuesta con citas. Paso a paso, en el navegador." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <!--SEO-->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307080a'/%3E%3Ccircle cx='10' cy='10' r='4' fill='%23ffb547'/%3E%3Ccircle cx='22' cy='12' r='4' fill='%238b7bff'/%3E%3Ccircle cx='14' cy='22' r='4' fill='%23c9ff3b'/%3E%3C/svg%3E" />
+    <script>
+      // Accesibilidad antes del primer pintado: tamaño, espaciado, contraste, modo lectura y movimiento.
+      (function () {
+        try {
+          var a = JSON.parse(localStorage.getItem('shongo-rag-access') || '{}');
+          var r = document.documentElement;
+          r.style.fontSize = (a.fs || 100) + '%';
+          r.dataset.reading = a.reading ? 'on' : 'off';
+          r.dataset.spacing = a.spacing ? 'wide' : 'normal';
+          r.dataset.contrast = a.contrast ? 'high' : 'normal';
+          r.dataset.motion = a.motion ? 'reduce' : 'normal';
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="relative min-h-screen">
+    <canvas id="bg" aria-hidden="true"></canvas>
+    <div id="progress" class="fixed inset-x-0 top-0 z-50 h-[3px]" aria-hidden="true"></div>
+
+    <!-- Encabezado -->
+    <header class="fixed inset-x-0 top-0 z-40 border-b border-line bg-ground/70 backdrop-blur-md">
+      <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-4 md:px-8">
+        <a href="#inicio" class="flex shrink-0 items-center gap-3 whitespace-nowrap font-display text-sm font-bold tracking-tight">
+          <span class="grid size-7 place-items-center rounded-lg bg-acid font-mono text-[0.6875rem] text-ground">S</span>
+          Shongo <span class="hidden font-mono text-xs font-normal text-ink-faint sm:inline">/ RAG</span>
+        </a>
+        <nav class="hidden min-w-0 items-center gap-5 overflow-x-auto whitespace-nowrap text-[0.8125rem] text-ink-dim lg:flex" aria-label="Pasos">
+          <a class="transition-colors hover:text-acid" href="#ingesta">01 Ingesta</a>
+          <a class="transition-colors hover:text-acid" href="#embedding">02 Embedding</a>
+          <a class="transition-colors hover:text-acid" href="#base-datos">03 Base de datos</a>
+          <a class="transition-colors hover:text-acid" href="#pregunta">04 Pregunta</a>
+          <a class="transition-colors hover:text-acid" href="#proximidad">05 Proximidad</a>
+          <a class="transition-colors hover:text-acid" href="#respuesta">06 Respuesta</a>
+        </nav>
+        <div class="flex items-center gap-2">
+          <button id="theme-toggle" type="button" class="btn btn--ghost btn--small whitespace-nowrap">
+            <span aria-hidden="true">◐</span><span id="theme-label" class="sr-only sm:not-sr-only">Modo claro</span>
+          </button>
+          <a href="#resumen" class="btn btn--ghost btn--small hidden whitespace-nowrap md:inline-flex">Mapa completo</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Mapa lateral de pasos (solo en pantallas grandes) -->
+    <aside class="fixed left-6 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-3 xl:flex" aria-label="Progreso">
+      <a class="step-link" href="#ingesta" data-step-link="1">01 Ingesta</a>
+      <a class="step-link" href="#embedding" data-step-link="2">02 Embedding</a>
+      <a class="step-link" href="#base-datos" data-step-link="3">03 Base de datos</a>
+      <a class="step-link" href="#pregunta" data-step-link="4">04 Pregunta</a>
+      <a class="step-link" href="#proximidad" data-step-link="5">05 Proximidad</a>
+      <a class="step-link" href="#respuesta" data-step-link="6">06 Respuesta</a>
+    </aside>
+
+    <main class="relative z-10">
+      <!-- ============ PORTADA ============ -->
+      <section id="inicio" class="relative flex min-h-[100svh] items-center pt-24 pb-16">
+        <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
+          <p class="hero-eyebrow eyebrow mb-6" style="--c: var(--color-acid)">Shongo · IA aplicada · 6 pasos y un mapa</p>
+          <h1 id="hero-title" class="max-w-4xl text-[min(clamp(2.4rem,6.2vw,5.4rem),12.5vw)] font-extrabold leading-[0.98]">
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:0">Cómo</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:1">funciona</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:2">un</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:3"><em>RAG</em>,</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:4">paso</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:5">a</span></span>
+            <span class="inline-block overflow-hidden align-bottom"><span class="word" style="--i:6">paso.</span></span>
+          </h1>
+          <p class="hero-lead mt-7 max-w-2xl text-lg leading-relaxed text-ink-dim md:text-xl">
+            <em>Retrieval-Augmented Generation</em>: antes de responder, el modelo busca en tus documentos y lee lo que encuentra.
+            Aquí recorremos el viaje completo, desde un PDF hasta una respuesta con cita.
+          </p>
+
+          <div class="hero-cta mt-10 flex flex-wrap gap-3">
+            <a href="#ingesta" class="btn btn--primary">Empezar el recorrido →</a>
+            <a href="#resumen" class="btn btn--ghost">Ir al mapa</a>
+          </div>
+
+          <ul class="hero-pipe mt-14 flex flex-wrap gap-2 text-xs font-mono">
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-ingesta); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Archivo</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-ingesta); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Fragmentos</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-embed); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Vectores</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-db); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Base de datos</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-acid); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Pregunta</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-sky); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Proximidad</li>
+            <li class="rounded-full border px-3 py-1.5" style="--c:var(--color-coral); border-color: color-mix(in srgb, var(--c) 60%, transparent); color: var(--c)">Respuesta</li>
+          </ul>
+
+          <div class="mt-12 flex flex-wrap items-center gap-5">
+            <div id="hero-pieces" class="hero-pieces flex gap-2" aria-hidden="true">
+              <i style="--c:var(--color-ingesta)"></i><i style="--c:var(--color-embed)"></i><i style="--c:var(--color-db)"></i><i style="--c:var(--color-acid)"></i>
+            </div>
+            <p class="max-w-md text-sm text-ink-faint">
+              Todo corre en tu navegador. El modelo de embeddings es didáctico (8 dimensiones) para que puedas leer cada número.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ EL PROBLEMA ============ -->
+      <section id="por-que" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-coral)">
+        <p class="eyebrow mb-5" data-reveal>El problema</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          Un modelo sin tus documentos <em>adivina</em> con seguridad
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          Un LLM aprendió de textos públicos hasta cierta fecha. No conoce las políticas de tu tienda, y cuando no sabe,
+          puede responder algo plausible pero falso. RAG cambia el orden: primero busca, después responde.
+        </p>
+
+        <div class="mt-12 grid gap-5 md:grid-cols-2" data-reveal-group>
+          <article class="panel" style="--c:var(--color-brasa); border-top: 3px solid var(--c)">
+            <p class="font-mono text-[0.6875rem] uppercase tracking-widest" style="color:var(--c)">Sin RAG</p>
+            <p class="mt-4 text-sm text-ink-faint">Pregunta: <span class="text-ink">¿Cuánto tarda el envío a Medellín?</span></p>
+            <p class="mt-4 text-lg text-ink">“Normalmente entre 5 y 7 días hábiles, según la transportadora.”</p>
+            <p class="mt-5 text-sm text-ink-dim">Suena bien, pero el número lo inventó. Nadie lo revisó contra la política real.</p>
+          </article>
+          <article class="panel" style="--c:var(--color-acid); border-top: 3px solid var(--c)">
+            <p class="font-mono text-[0.6875rem] uppercase tracking-widest" style="color:var(--c)">Con RAG</p>
+            <p class="mt-4 text-sm text-ink-faint">Pregunta: <span class="text-ink">¿Cuánto tarda el envío a Medellín?</span></p>
+            <p class="mt-4 text-lg text-ink">“Medellín no aparece por nombre, pero la política dice que a otras ciudades tardan 3 a 5 días hábiles. [1]”</p>
+            <p class="mt-5 text-sm text-ink-dim">Busca el párrafo correcto, responde con él y cita la fuente para que puedas verificarlo.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============ 01 INGESTA ============ -->
+      <section id="ingesta" data-step="1" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-ingesta)">
+        <p class="eyebrow mb-5" data-reveal>Paso 01 · Ingesta</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          El archivo se convierte en <em>fragmentos</em>
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          Un PDF, un Word o una página web primero se convierten en texto plano. Luego el texto se parte en fragmentos (chunks):
+          son la unidad que el sistema recupera después. Si son muy grandes traen ruido; si son muy pequeños pierden contexto.
+        </p>
+
+        <ol class="mt-8 grid gap-3 text-sm md:grid-cols-3" data-reveal-group>
+          <li class="panel p-4! flex gap-3"><b class="font-mono text-ingesta">1</b> Extraer el texto del archivo</li>
+          <li class="panel p-4! flex gap-3"><b class="font-mono text-ingesta">2</b> Limpiar espacios y saltos de línea</li>
+          <li class="panel p-4! flex gap-3"><b class="font-mono text-ingesta">3</b> Partir en fragmentos con solapamiento</li>
+        </ol>
+
+        <div class="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]" data-reveal>
+          <div class="panel space-y-7 self-start">
+            <div>
+              <div class="flex items-baseline justify-between">
+                <label for="size" class="text-sm font-medium">Tamaño del fragmento</label>
+                <output id="size-out" class="font-mono text-xs text-ink-dim"></output>
+              </div>
+              <input id="size" type="range" min="120" max="400" step="10" value="260" class="mt-3" />
+            </div>
+            <div>
+              <div class="flex items-baseline justify-between">
+                <label for="overlap" class="text-sm font-medium">Solapamiento</label>
+                <output id="overlap-out" class="font-mono text-xs text-ink-dim"></output>
+              </div>
+              <input id="overlap" type="range" min="0" max="130" step="5" value="40" class="mt-3" />
+            </div>
+            <div id="ingesta-stats" class="flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5 text-xs text-ink-faint [&_b]:font-mono [&_b]:text-ink"></div>
+            <p class="text-sm leading-relaxed text-ink-dim">
+              <b class="text-ink">¿Por qué solapar?</b> Sin solapamiento, una frase que cae justo en el corte queda repartida y ningún
+              fragmento la tiene completa. Repetir un poco de texto a propósito evita ese hueco.
+            </p>
+          </div>
+
+          <div class="panel">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p class="text-sm font-medium" id="doc-title">Documento</p>
+              <p class="text-[0.6875rem] text-ink-faint font-mono">
+                <span class="mr-2 inline-block size-2 rounded-full" style="background:var(--color-ingesta)"></span>fragmento
+                <span class="ml-3 inline-block size-2 rounded-full bg-ink/40"></span>zona compartida (solapamiento)
+              </p>
+            </div>
+            <div id="doc-view" class="max-h-[420px] overflow-auto pr-2 text-[0.9375rem] leading-[1.9] text-ink-dim"></div>
+          </div>
+        </div>
+
+        <div id="chunk-list" class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-reveal></div>
+      </section>
+
+      <!-- ============ 02 EMBEDDING ============ -->
+      <section id="embedding" data-step="2" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-embed)">
+        <p class="eyebrow mb-5" data-reveal>Paso 02 · Embedding</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          Cada fragmento se vuelve una lista de <em>números</em>
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          El modelo de embeddings lee el texto y devuelve un vector. Textos con significado parecido quedan con vectores parecidos,
+          aunque no compartan palabras. Escribe lo que quieras y mira el recorrido.
+        </p>
+
+        <div class="mt-10 grid gap-6 lg:grid-cols-2" data-reveal>
+          <div class="panel space-y-6">
+            <div>
+              <label for="emb-input" class="text-sm font-medium">Texto de entrada</label>
+              <textarea id="emb-input" rows="3" class="mt-3 w-full p-4 text-[0.9375rem] leading-relaxed">Los pedidos en Bogotá llegan en uno a dos días hábiles.</textarea>
+            </div>
+            <div>
+              <p class="mb-3 text-xs font-mono uppercase tracking-widest text-ink-faint">1 · Tokens que el modelo reconoce</p>
+              <div id="emb-tokens" class="flex flex-wrap gap-2"></div>
+            </div>
+            <div>
+              <p class="mb-3 text-xs font-mono uppercase tracking-widest text-ink-faint">2 · Conteo por concepto</p>
+              <div id="emb-raw" class="flex flex-wrap gap-2"></div>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <div class="model-box flex items-center gap-4" id="emb-model">
+              <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-embed font-mono text-on-accent">M</div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium">Modelo de embeddings</p>
+                <p class="font-mono text-xs text-ink-faint" id="emb-model-name"></p>
+              </div>
+            </div>
+            <div class="panel">
+              <p class="mb-4 text-xs font-mono uppercase tracking-widest text-ink-faint">3 · Vector normalizado (lo que se guarda)</p>
+              <div id="emb-bars" class="space-y-2.5"></div>
+              <p id="emb-array" class="mt-5 break-all rounded-xl bg-ground-2 p-3 font-mono text-xs text-ink-dim"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel mt-6 grid gap-4 text-sm leading-relaxed text-ink-dim md:grid-cols-2" data-reveal>
+          <p><b class="text-ink">Dimensiones reales:</b> un modelo real genera entre 384 y 3 072 números, aprendidos de millones de textos. Aquí son 8 conceptos escritos a mano para que se puedan leer.</p>
+          <p><b class="text-ink">Regla de oro:</b> el mismo modelo para los documentos y para las preguntas. Si cambias de modelo, hay que volver a calcular todos los vectores.</p>
+        </div>
+      </section>
+
+      <!-- ============ 03 BASE DE DATOS ============ -->
+      <section id="base-datos" data-step="3" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-db)">
+        <p class="eyebrow mb-5" data-reveal>Paso 03 · Almacenamiento</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          Cada fragmento se guarda como un <em>registro</em>
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          La base de datos no guarda solo el texto. Guarda el vector para buscar por cercanía, una huella (hash) para detectar cambios
+          y el nombre del modelo, para no mezclar vectores que no se pueden comparar.
+        </p>
+
+        <div class="mt-10 grid gap-6 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]" data-reveal>
+          <div class="panel">
+            <p class="mb-4 text-xs font-mono uppercase tracking-widest text-ink-faint">Anatomía de una fila</p>
+            <div id="db-select" class="mb-5 flex flex-wrap gap-2"></div>
+            <dl id="db-anatomy" class="m-0"></dl>
+          </div>
+
+          <div class="panel min-w-0">
+            <p class="mb-4 text-xs font-mono uppercase tracking-widest text-ink-faint">Tabla <code class="normal-case">fragmentos</code> · todas las filas</p>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[640px] text-left">
+                <thead class="text-[0.6875rem] font-mono uppercase tracking-wider text-ink-faint">
+                  <tr class="border-b border-line">
+                    <th class="px-2 py-2 font-normal">id</th>
+                    <th class="px-2 py-2 font-normal">hash_sha256</th>
+                    <th class="px-2 py-2 font-normal">modelo</th>
+                    <th class="px-2 py-2 font-normal">texto</th>
+                    <th class="px-2 py-2 font-normal">embedding</th>
+                    <th class="px-2 py-2 font-normal">creado_en</th>
+                  </tr>
+                </thead>
+                <tbody id="db-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel mt-6 grid gap-6 lg:grid-cols-2" data-reveal>
+          <div class="space-y-4">
+            <p class="text-sm font-medium">Experimento: ¿cambió el texto?</p>
+            <p class="text-sm text-ink-dim">Edita el texto de la fila seleccionada. Mira cómo cambia la huella y qué hay que hacer en cada caso.</p>
+            <label for="db-edit" class="block text-sm font-medium">Texto de la fila</label>
+            <textarea id="db-edit" rows="4" class="w-full p-4 text-sm leading-relaxed"></textarea>
+            <div class="flex flex-wrap gap-2">
+              <button id="db-save" type="button" class="btn btn--primary btn--small">Guardar cambio y recalcular</button>
+              <button id="db-reset" type="button" class="btn btn--ghost btn--small" hidden>Restaurar original</button>
+            </div>
+          </div>
+          <div class="space-y-4 font-mono text-xs">
+            <div>
+              <p class="text-ink-faint">hash guardado</p>
+              <p id="db-hash-old" class="break-all text-ink-dim">…</p>
+            </div>
+            <div>
+              <p class="text-ink-faint">hash del texto editado</p>
+              <p id="db-hash-new" class="break-all text-ink-dim">—</p>
+            </div>
+            <p id="db-verdict" class="rounded-xl border border-line p-4 font-sans text-sm" data-state="idle">Escribe algo para calcular la huella.</p>
+          </div>
+        </div>
+
+        <pre class="panel mt-6 overflow-x-auto font-mono text-[0.78125rem] leading-relaxed text-ink-dim" data-reveal><span class="text-ink-faint">-- PostgreSQL + pgvector (un ejemplo de esquema)</span>
+<span class="text-db">CREATE TABLE</span> fragmentos (
+  id          <span class="text-ink-faint">TEXT PRIMARY KEY,</span>          <span class="text-ink-faint">-- identifica la fila</span>
+  documento   TEXT NOT NULL,                 <span class="text-ink-faint">-- de qué archivo viene</span>
+  hash_sha256 CHAR(64) NOT NULL,             <span class="text-ink-faint">-- huella: detecta cambios</span>
+  modelo      TEXT NOT NULL,                 <span class="text-ink-faint">-- qué modelo generó el vector</span>
+  texto       TEXT NOT NULL,                 <span class="text-ink-faint">-- lo que leerá el LLM</span>
+  embedding   VECTOR(8) NOT NULL,            <span class="text-ink-faint">-- los números (1 024–3 072 en la vida real)</span>
+  creado_en   TIMESTAMPTZ DEFAULT now()
+);</pre>
+      </section>
+
+      <!-- ============ 04 PREGUNTA ============ -->
+      <section id="pregunta" data-step="4" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-acid)">
+        <p class="eyebrow mb-5" data-reveal>Paso 04 · Consulta</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          La pregunta pasa por el <em>mismo modelo</em>
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          No buscamos palabras exactas. La pregunta se convierte en vector con el mismo modelo que los fragmentos. Así,
+          “¿cuánto demora el despacho?” encuentra el párrafo de envíos aunque no comparta ninguna palabra.
+        </p>
+
+        <div class="mt-10 panel" data-reveal>
+          <label for="q-input" class="text-sm font-medium">Pregunta del usuario</label>
+          <input id="q-input" type="text" class="mt-3 w-full px-5 py-4 text-lg" autocomplete="off" />
+          <div id="q-chips" class="mt-4 flex flex-wrap gap-2"></div>
+
+          <div class="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div class="space-y-5">
+              <div>
+                <p class="mb-3 text-xs font-mono uppercase tracking-widest text-ink-faint">1 · Tokens</p>
+                <div id="q-tokens" class="flex flex-wrap gap-2"></div>
+              </div>
+              <div class="model-box flex items-center gap-4" id="q-model">
+                <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-embed font-mono text-on-accent">M</div>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium">Mismo modelo que los fragmentos</p>
+                  <p class="font-mono text-xs text-ink-faint" id="q-model-name"></p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="mb-3 text-xs font-mono uppercase tracking-widest text-ink-faint">2 · Vector de la pregunta</p>
+              <div id="q-bars" class="space-y-2.5"></div>
+              <p id="q-array" class="mt-5 break-all rounded-xl bg-ground-2 p-3 font-mono text-xs text-ink-dim"></p>
+            </div>
+          </div>
+        </div>
+
+        <p class="mt-6 max-w-2xl text-sm text-ink-faint" data-reveal>
+          Si la pregunta se calculara con otro modelo, sus números no significarían lo mismo que los de la base de datos.
+          Por eso cada fila guarda el nombre del modelo.
+        </p>
+      </section>
+
+      <!-- ============ 05 PROXIMIDAD ============ -->
+      <section id="proximidad" data-step="5" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-sky)">
+        <p class="eyebrow mb-5" data-reveal>Paso 05 · Proximidad</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          ¿Qué tan <em>cerca</em> está cada fragmento?
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          Comparamos el vector de la pregunta contra cada fragmento con una función de proximidad. Luego tomamos los k más cercanos
+          (top-k) y descartamos los que quedan por debajo del umbral.
+        </p>
+
+        <div class="panel mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4" data-reveal>
+          <div class="space-y-3 md:col-span-2 xl:col-span-2">
+            <p class="text-sm font-medium">Función de proximidad</p>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Métrica">
+              <button type="button" class="metric-btn" data-metric="coseno" aria-pressed="true">Coseno</button>
+              <button type="button" class="metric-btn" data-metric="punto">Producto punto</button>
+              <button type="button" class="metric-btn" data-metric="euclidiana">Distancia euclidiana</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between gap-4 xl:col-span-2 xl:justify-self-end">
+            <div>
+              <p class="text-sm font-medium">Vectores normalizados</p>
+              <p class="text-xs text-ink-faint">Longitud 1 para todos. Así lo hacen casi todos los modelos reales.</p>
+            </div>
+            <button id="norm-toggle" type="button" role="switch" aria-checked="true" aria-label="Normalizar vectores"></button>
+          </div>
+          <div>
+            <div class="flex items-baseline justify-between">
+              <label for="k-range" class="text-sm font-medium">Top-k</label>
+              <output id="k-out" class="font-mono text-xs text-ink-dim"></output>
+            </div>
+            <input id="k-range" type="range" min="1" max="6" step="1" value="3" class="mt-3" />
+          </div>
+          <div>
+            <div class="flex items-baseline justify-between">
+              <label for="th-range" class="text-sm font-medium">Umbral de coseno</label>
+              <output id="th-out" class="font-mono text-xs text-ink-dim"></output>
+            </div>
+            <input id="th-range" type="range" min="0" max="0.9" step="0.05" value="0.2" class="mt-3" />
+          </div>
+        </div>
+
+        <div class="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div data-reveal>
+            <div id="space"></div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
+              <span><i class="mr-1.5 inline-block size-2 rounded-full bg-acid"></i>Pregunta</span>
+              <span><i class="mr-1.5 inline-block size-2 rounded-full bg-sky"></i>Pasa al prompt</span>
+              <span><i class="mr-1.5 inline-block size-2 rounded-full bg-brasa"></i>Bajo el umbral</span>
+              <span><i class="mr-1.5 inline-block size-2 rounded-full bg-ink/25"></i>Otros</span>
+              <span class="w-full">Vista 3D aproximada (PCA sobre los vectores). Arrastra para girar. La búsqueda usa los 8 números completos.</span>
+            </div>
+          </div>
+          <div class="min-w-0" data-reveal>
+            <div class="mb-3 flex items-center justify-between">
+              <p class="text-sm font-medium">Ranking</p>
+              <p class="text-xs text-ink-faint">Pasan al prompt: <b id="selected-count" class="font-mono text-sky">0</b></p>
+            </div>
+            <ol id="rank-list" class="space-y-2.5"></ol>
+          </div>
+        </div>
+
+        <div class="panel mt-8 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" data-reveal>
+          <div class="space-y-3">
+            <p class="text-xs font-mono uppercase tracking-widest text-ink-faint">Fórmula</p>
+            <p id="formula" class="font-mono text-lg text-sky"></p>
+            <p id="metric-desc" class="text-sm leading-relaxed text-ink-dim"></p>
+          </div>
+          <div class="space-y-3">
+            <p class="text-xs font-mono uppercase tracking-widest text-ink-faint">Lectura</p>
+            <p id="metric-note" class="text-sm leading-relaxed text-ink-dim" data-kind="ok"></p>
+            <p class="text-xs text-ink-faint">Prueba con “¿Cuál es la capital de Francia?”: ninguna palabra es conocida, el vector queda en cero y ningún fragmento supera el umbral.</p>
+          </div>
+        </div>
+
+        <div class="mt-12" data-reveal>
+          <h3 class="font-display text-xl font-bold">Otras fórmulas para medir distancia</h3>
+          <p class="mt-3 max-w-3xl text-sm leading-relaxed text-ink-dim">
+            La demo usa el <b class="text-ink">coseno</b>, que es el más común en RAG. Pero existen otras formas de medir qué tan parecidos
+            son dos vectores (listas de números), y cada una responde una pregunta distinta. Estas son las más usadas:
+          </p>
+          <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-reveal-group>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Manhattan (L1)</p>
+              <p class="mt-2 font-mono text-sm text-ink">Σ |aᵢ − bᵢ|</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Suma de las diferencias en cada dimensión, como contar las cuadras que recorres en una cuadrícula.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Cuando no quieres que una sola diferencia muy grande domine el resultado.</p>
+            </article>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Minkowski (Lp)</p>
+              <p class="mt-2 font-mono text-sm text-ink">(Σ |aᵢ − bᵢ|ᵖ)^(1/p)</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Es una familia de fórmulas. Con p&nbsp;=&nbsp;1 da Manhattan; con p&nbsp;=&nbsp;2, la euclidiana.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Cuando quieres ajustar cuánto pesan las diferencias grandes.</p>
+            </article>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Chebyshev (L∞)</p>
+              <p class="mt-2 font-mono text-sm text-ink">máx |aᵢ − bᵢ|</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Solo mira la diferencia más grande entre dos dimensiones.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Cuando ninguna dimensión debe estar muy lejos de la otra.</p>
+            </article>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Distancia angular</p>
+              <p class="mt-2 font-mono text-sm text-ink">arccos(coseno)</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Mide el ángulo entre los dos vectores. 0 = misma dirección.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Cuando necesitas una distancia que cumpla todas las reglas matemáticas, por ejemplo para agrupar. Nota: 1 − coseno parece igual, pero no las cumple.</p>
+            </article>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Jaccard</p>
+              <p class="mt-2 font-mono text-sm text-ink">|A ∩ B| / |A ∪ B|</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Qué parte de los elementos comparten dos conjuntos. 1 = idénticos, 0 = nada en común.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Búsqueda por palabras o etiquetas exactas, no por significado.</p>
+            </article>
+            <article class="panel p-5!">
+              <p class="font-mono text-xs text-acid">Hamming</p>
+              <p class="mt-2 font-mono text-sm text-ink">número de posiciones distintas</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Qué mide:</b> Cuenta cuántos bits (0 o 1) son diferentes.</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-dim"><b class="text-ink">Cuándo:</b> Vectores binarios, muy comprimidos, que se comparan rápido.</p>
+            </article>
+          </div>
+          <div class="panel mt-6 p-5!">
+            <p class="text-sm leading-relaxed text-ink-dim">
+              <b class="text-ink">Cuál usa esta demo:</b> el coseno. Con vectores normalizados (de longitud 1), el coseno, el producto
+              punto, la euclidiana y la angular dan el mismo orden de resultados.
+            </p>
+          </div>
+          <a href="metricas.html" class="btn btn--primary mt-6">Ver las métricas con ejemplos y calculadora →</a>
+        </div>
+      </section>
+
+      <!-- ============ 06 RESPUESTA ============ -->
+      <section id="respuesta" data-step="6" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-coral)">
+        <p class="eyebrow mb-5" data-reveal>Paso 06 · Respuesta</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          El prompt se arma con lo <em>encontrado</em>
+        </h2>
+        <p class="mt-6 max-w-2xl text-lg leading-relaxed text-ink-dim" data-reveal>
+          El modelo no recuerda tus documentos. Recibe un prompt con tres partes: las instrucciones, el contexto (los fragmentos que
+          pasaron el filtro, numerados) y la pregunta. Redacta la respuesta con ese contexto y cita sus fuentes.
+        </p>
+
+        <div class="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div class="space-y-3" data-reveal>
+            <div class="flex items-baseline justify-between">
+              <p class="text-sm font-medium">Prompt enviado al LLM</p>
+              <p class="font-mono text-xs text-ink-faint">
+                <span id="prompt-count"></span>
+                <span id="prompt-hint" class="ml-2 text-acid" hidden>↓ desplázate para ver todo</span>
+              </p>
+            </div>
+            <div class="prompt-wrap" data-overflow="false" data-end="true">
+              <div id="prompt-view" data-lenis-prevent tabindex="0" role="region" aria-label="Prompt completo enviado al modelo"></div>
+            </div>
+          </div>
+
+          <div class="space-y-3" data-reveal>
+            <p class="text-sm font-medium">Respuesta</p>
+            <div id="answer-box">
+              <p id="answer-status" class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint"></p>
+              <p id="answer"></p>
+            </div>
+            <div id="citations" class="flex flex-wrap gap-2"></div>
+            <p class="pt-4 text-sm leading-relaxed text-ink-faint">
+              <b class="text-ink-dim">Ilustrativo:</b> aquí no llamamos a ningún LLM. La respuesta toma la frase de los fragmentos más
+              parecida a la pregunta. Con un modelo real, la redacción la hace el LLM; la lógica del prompt es la misma.
+              Si una frase aparece cortada (…), la continuación está en el fragmento siguiente: por eso importa el solapamiento del paso 01.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 07 RESUMEN ============ -->
+      <section id="resumen" class="glow mx-auto max-w-6xl px-4 py-24 md:px-8 md:py-32" style="--c:var(--color-acid)">
+        <p class="eyebrow mb-5" data-reveal>Mapa completo</p>
+        <h2 class="max-w-3xl text-3xl font-bold leading-tight md:text-5xl" data-reveal>
+          El viaje completo, de un <em>PDF</em> a una respuesta
+        </h2>
+
+        <figure class="panel mt-12 overflow-hidden" data-reveal>
+          <div id="mapa" class="w-full"></div>
+          <figcaption class="mt-4 text-xs text-ink-faint">
+            Desplázate: el paquete viaja por el sistema, de la ingesta a la respuesta. Pulsa una estación para ir a su paso.
+          </figcaption>
+        </figure>
+        <ol class="sr-only">
+          <li>01 · Archivo: el PDF, Word o página web pasa a texto plano.</li>
+          <li>01 · Fragmentos: el texto se parte en fragmentos con solapamiento.</li>
+          <li>02 · Embedding: cada fragmento se convierte en un vector con el modelo.</li>
+          <li>03 · Base de datos: se guarda id, hash, modelo, texto y vector.</li>
+          <li>04 · Pregunta: la pregunta se convierte en vector con el mismo modelo.</li>
+          <li>05 · Proximidad: coseno, top-k y umbral eligen los fragmentos.</li>
+          <li>06 · Prompt: instrucciones, fragmentos numerados y la pregunta.</li>
+          <li>06 · Respuesta: el modelo responde con citas, o dice que no lo encuentra.</li>
+        </ol>
+
+        <figure class="panel mt-8 overflow-hidden" data-reveal>
+          <h3 class="mb-4 font-display text-lg font-bold">Un RAG simple, en un diagrama</h3>
+          <div class="dg-scroll">
+            <div id="diagrama"></div>
+          </div>
+          <figcaption class="mt-4 text-xs text-ink-faint">
+            Arriba, cómo se prepara la base una sola vez. Abajo, cómo responde cada pregunta. En celulares, desliza el diagrama para verlo completo.
+          </figcaption>
+        </figure>
+
+        <div class="mt-14 grid gap-6 md:grid-cols-2" data-reveal>
+          <div class="panel">
+            <p class="mb-4 font-display text-xl font-bold text-brasa">Errores comunes</p>
+            <ul class="space-y-3 text-sm leading-relaxed text-ink-dim">
+              <li>• <b class="text-ink">Fragmentos gigantes:</b> mucho ruido y la búsqueda pierde precisión.</li>
+              <li>• <b class="text-ink">Cambiar de modelo sin recalcular:</b> los vectores viejos ya no son comparables.</li>
+              <li>• <b class="text-ink">No guardar el hash:</b> recalculas todo cada vez que cambia una coma.</li>
+              <li>• <b class="text-ink">Umbral en cero:</b> el modelo responde aunque los fragmentos no tengan nada que ver.</li>
+              <li>• <b class="text-ink">Respuestas sin cita:</b> sin fuente no hay forma de verificar nada.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <p class="mb-4 font-display text-xl font-bold text-db">Para llevarlo a producción</p>
+            <ul class="space-y-3 text-sm leading-relaxed text-ink-dim">
+              <li>• <b class="text-ink">Base vectorial real:</b> pgvector, Qdrant o similar, con índice HNSW para millones de fragmentos.</li>
+              <li>• <b class="text-ink">Modelo de embeddings real</b>, el mismo para documentos y preguntas.</li>
+              <li>• <b class="text-ink">Reranker:</b> reordena los top-k con un modelo más preciso.</li>
+              <li>• <b class="text-ink">Evaluación:</b> preguntas con respuesta esperada para medir si el RAG mejora de verdad.</li>
+              <li>• <b class="text-ink">Permisos:</b> cada fragmento hereda quién puede verlo antes de entrar al prompt.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="relative z-10 mx-auto max-w-6xl border-t border-line px-4 py-10 text-xs text-ink-faint md:px-8">
+      <p class="flex flex-wrap justify-between gap-3">
+        <span>Shongo · RAG explicado paso a paso</span>
+        <span class="font-mono">Vite · TypeScript · GSAP · Three.js · Tailwind</span>
+      </p>
+      <p class="mt-3 max-w-3xl leading-relaxed">
+        La tienda, los documentos y el modelo de embeddings son ficticios y didácticos. Los números son ilustrativos: un sistema real usa modelos
+        y bases vectoriales de producción.
+      </p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

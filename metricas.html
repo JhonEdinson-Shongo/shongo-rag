@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07080a" />
+    <title>Métricas de distancia para RAG: coseno, euclidiana, Manhattan y más · Shongo</title>
+    <meta
+      name="description"
+      content="Cómo se mide qué tan cerca está un fragmento de una pregunta en RAG: coseno, producto punto, euclidiana, Manhattan, Chebyshev, angular, Jaccard y Hamming, con ejemplos y una calculadora."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+        <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307080a'/%3E%3Ccircle cx='10' cy='10' r='4' fill='%23ffb547'/%3E%3Ccircle cx='22' cy='12' r='4' fill='%238b7bff'/%3E%3Ccircle cx='14' cy='22' r='4' fill='%23c9ff3b'/%3E%3C/svg%3E" />
+    <script>
+      // Modo antes del primer pintado: el elegido por la persona o, si no hay, el del sistema.
+      (function () {
+        var m = 'dark';
+        try {
+          var s = localStorage.getItem('shongo-rag-theme');
+          m = s === 'light' || s === 'dark' ? s : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        } catch (e) {}
+        document.documentElement.dataset.theme = m;
+        document.documentElement.style.colorScheme = m;
+      })();
+    </script>
+    <!--SEO-METRICAS-->
+    <script>
+      // Accesibilidad antes del primer pintado: tamaño, espaciado, contraste, modo lectura y movimiento.
+      (function () {
+        try {
+          var a = JSON.parse(localStorage.getItem('shongo-rag-access') || '{}');
+          var r = document.documentElement;
+          r.style.fontSize = (a.fs || 100) + '%';
+          r.dataset.reading = a.reading ? 'on' : 'off';
+          r.dataset.spacing = a.spacing ? 'wide' : 'normal';
+          r.dataset.contrast = a.contrast ? 'high' : 'normal';
+          r.dataset.motion = a.motion ? 'reduce' : 'normal';
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="relative min-h-screen">
+    <header class="fixed inset-x-0 top-0 z-40 border-b border-line bg-ground/70 backdrop-blur-md">
+      <div class="mx-auto flex h-16 max-w-4xl items-center justify-between gap-4 px-4 md:px-8">
+        <a href="index.html" class="flex items-center gap-3 font-display text-sm font-bold tracking-tight">
+          <span class="grid size-7 place-items-center rounded-lg bg-fill-acid font-mono text-[0.6875rem] text-on-fill">S</span>
+          Shongo <span class="hidden font-mono text-xs font-normal text-ink-faint sm:inline">/ Métricas</span>
+        </a>
+        <button id="theme-toggle" type="button" class="btn btn--ghost btn--small whitespace-nowrap">
+          <span aria-hidden="true">◐</span><span id="theme-label" class="sr-only sm:not-sr-only">Modo claro</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-4xl px-4 pb-24 pt-28 md:px-8">
+      <a href="index.html#proximidad" class="text-sm text-ink-dim transition-colors hover:text-acid">← Volver a la sección 05 del recorrido</a>
+
+      <!-- Portada -->
+      <section class="mt-10">
+        <p class="eyebrow mb-5" style="--c: var(--color-acid)">Página de apoyo · Paso 05 · Proximidad</p>
+        <h1 class="text-4xl font-bold leading-tight md:text-6xl">¿Qué tan <em>cerca</em> está un fragmento de una pregunta?</h1>
+        <p class="mt-6 text-lg leading-relaxed text-ink-dim">
+          En RAG, cada texto se convierte en un <b class="text-ink">vector</b>: una lista de números. Para decidir qué fragmentos se
+          parecen más a la pregunta, comparamos esos vectores con una fórmula. Aquí explicamos las más usadas, con ejemplos que puedes
+          calcular a mano.
+        </p>
+      </section>
+
+      <!-- 1. Lo básico -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">1 · Lo básico, en seis palabras</h2>
+        <dl class="mt-6 grid gap-4 md:grid-cols-2">
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Vector</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">Una lista de números. Por ejemplo, (1, 2, 2).</dd>
+          </div>
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Dimensión</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">
+              Cuántos números tiene el vector. (1, 2, 2) tiene 3 dimensiones. Los modelos reales usan entre 384 y 3 072.
+            </dd>
+          </div>
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Magnitud</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">Qué tan largo es el vector.</dd>
+          </div>
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Dirección</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">Hacia dónde apunta el vector, sin importar qué tan largo sea.</dd>
+          </div>
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Distancia</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">Qué tan lejos están dos vectores. Menor = más cerca.</dd>
+          </div>
+          <div class="panel p-5!">
+            <dt class="font-mono text-sm text-acid">Similitud</dt>
+            <dd class="mt-2 text-sm leading-relaxed text-ink-dim">Qué tan parecidos son. Mayor = más parecido.</dd>
+          </div>
+        </dl>
+        <p class="mt-5 text-sm leading-relaxed text-ink-dim">
+          Algunas fórmulas miden distancia y otras similitud. Por eso, en cada tabla verás si mayor o menor significa "más cerca".
+        </p>
+      </section>
+
+      <!-- 2. Ejemplo -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">2 · Un ejemplo para calcular a mano</h2>
+        <p class="mt-4 text-ink-dim">Usamos tres vectores de 3 dimensiones:</p>
+        <ul class="mt-4 space-y-1 font-mono text-sm text-ink">
+          <li>A = (1, 2, 2)</li>
+          <li>B = (2, 1, 2)</li>
+          <li>C = (4, 8, 8)</li>
+        </ul>
+        <p class="mt-4 leading-relaxed text-ink-dim">
+          C es A multiplicado por 4. Apunta exactamente hacia el mismo lado, pero es cuatro veces más largo. Ese caso muestra la diferencia
+          entre las fórmulas.
+        </p>
+
+        <div class="panel mt-6 overflow-x-auto p-5!">
+          <table class="w-full min-w-[560px] text-left text-sm">
+            <caption class="mb-3 text-left text-xs text-ink-faint">Resultados de cada fórmula. Redondeados a 3 decimales.</caption>
+            <thead class="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-faint">
+              <tr class="border-b border-line">
+                <th scope="col" class="py-2 pr-4 font-normal">Fórmula</th>
+                <th scope="col" class="py-2 pr-4 font-normal">A y B</th>
+                <th scope="col" class="py-2 pr-4 font-normal">A y C</th>
+                <th scope="col" class="py-2 font-normal">Cómo se lee</th>
+              </tr>
+            </thead>
+            <tbody class="text-ink-dim">
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Producto punto</th>
+                <td class="py-3 pr-4 font-mono">8</td>
+                <td class="py-3 pr-4 font-mono">36</td>
+                <td class="py-3">Mayor = más parecido. Crece con el tamaño: C gana solo por ser largo.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Coseno</th>
+                <td class="py-3 pr-4 font-mono">0.889</td>
+                <td class="py-3 pr-4 font-mono">1.000</td>
+                <td class="py-3">1 = misma dirección. Ignora el tamaño.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Euclidiana</th>
+                <td class="py-3 pr-4 font-mono">1.414</td>
+                <td class="py-3 pr-4 font-mono">9</td>
+                <td class="py-3">Menor = más cerca. A y C quedan lejos, aunque apunten igual.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Manhattan</th>
+                <td class="py-3 pr-4 font-mono">2</td>
+                <td class="py-3 pr-4 font-mono">15</td>
+                <td class="py-3">Menor = más cerca.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Chebyshev</th>
+                <td class="py-3 pr-4 font-mono">1</td>
+                <td class="py-3 pr-4 font-mono">6</td>
+                <td class="py-3">Menor = más cerca. Solo cuenta la diferencia más grande.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Minkowski (p = 3)</th>
+                <td class="py-3 pr-4 font-mono">1.260</td>
+                <td class="py-3 pr-4 font-mono">7.714</td>
+                <td class="py-3">Menor = más cerca. Es la familia que incluye a Manhattan y a la euclidiana.</td>
+              </tr>
+              <tr>
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Angular</th>
+                <td class="py-3 pr-4 font-mono">0.476 rad (27.3°)</td>
+                <td class="py-3 pr-4 font-mono">0 rad</td>
+                <td class="py-3">Menor = más cerca. 0 = misma dirección.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel mt-6 p-5!">
+          <p class="text-sm font-medium text-ink">Cómo se calcula, paso a paso, para A y B</p>
+          <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-dim">
+            <li>Producto punto: multiplica cada par de números y suma. 1·2 + 2·1 + 2·2 = <b class="text-ink">8</b>.</li>
+            <li>Longitud de cada vector: A = √(1² + 2² + 2²) = √9 = 3. B = √(2² + 1² + 2²) = 3.</li>
+            <li>Coseno: divide el producto punto entre las longitudes. 8 / (3 · 3) = <b class="text-ink">0.889</b>.</li>
+            <li>Euclidiana: resta cada par, eleva al cuadrado, suma y saca raíz. Diferencias (−1, 1, 0): √(1 + 1 + 0) = <b class="text-ink">1.414</b>.</li>
+          </ol>
+        </div>
+
+        <div class="panel mt-6 p-5! md:p-7!">
+          <p class="font-medium text-ink">Qué aprendemos</p>
+          <p class="mt-2 leading-relaxed text-ink-dim">
+            A y C apuntan hacia el mismo lado, así que el coseno da 1: son idénticos en dirección. Pero el producto punto da 36 y la
+            euclidiana da 9, porque esas fórmulas también miran el tamaño. Por eso, en RAG se usan sobre todo el coseno o el producto punto
+            con vectores normalizados (de longitud 1), que es lo que hace la demo del recorrido.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3. Calculadora -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">3 · Calcula con tus propios vectores</h2>
+        <p class="mt-4 leading-relaxed text-ink-dim">
+          Cambia los números. Los resultados se actualizan solos. Son vectores de 3 dimensiones, para poder seguirlos a mano.
+        </p>
+
+        <div id="calc-inputs" class="mt-6 grid gap-6 md:grid-cols-2">
+          <fieldset class="panel p-5!">
+            <legend class="px-1 text-sm font-medium text-ink">Vector A</legend>
+            <div class="mt-3 grid grid-cols-3 gap-3">
+              <label class="text-xs text-ink-faint">a₁<input id="a1" type="number" value="1" step="any" class="num-input" /></label>
+              <label class="text-xs text-ink-faint">a₂<input id="a2" type="number" value="2" step="any" class="num-input" /></label>
+              <label class="text-xs text-ink-faint">a₃<input id="a3" type="number" value="2" step="any" class="num-input" /></label>
+            </div>
+          </fieldset>
+          <fieldset class="panel p-5!">
+            <legend class="px-1 text-sm font-medium text-ink">Vector B</legend>
+            <div class="mt-3 grid grid-cols-3 gap-3">
+              <label class="text-xs text-ink-faint">b₁<input id="b1" type="number" value="2" step="any" class="num-input" /></label>
+              <label class="text-xs text-ink-faint">b₂<input id="b2" type="number" value="1" step="any" class="num-input" /></label>
+              <label class="text-xs text-ink-faint">b₃<input id="b3" type="number" value="2" step="any" class="num-input" /></label>
+            </div>
+          </fieldset>
+          <div class="md:col-span-2">
+            <div class="flex items-baseline justify-between">
+              <label for="calc-p" class="text-sm font-medium text-ink">Valor de p para Minkowski</label>
+              <output id="calc-p-out" class="font-mono text-xs text-ink-dim">3</output>
+            </div>
+            <input id="calc-p" type="range" min="1" max="8" step="0.5" value="3" class="mt-3" />
+          </div>
+        </div>
+
+        <div class="panel mt-6 overflow-x-auto p-5!">
+          <table class="w-full min-w-[520px] text-left text-sm">
+            <caption class="sr-only">Resultados de la calculadora</caption>
+            <thead class="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-faint">
+              <tr class="border-b border-line">
+                <th scope="col" class="py-2 pr-4 font-normal">Fórmula</th>
+                <th scope="col" class="py-2 pr-4 font-normal">Resultado</th>
+                <th scope="col" class="py-2 font-normal">Cómo se lee</th>
+              </tr>
+            </thead>
+            <tbody id="calc-out" class="text-ink-dim"></tbody>
+          </table>
+        </div>
+        <p class="mt-3 text-xs leading-relaxed text-ink-faint">
+          El coseno y la angular no existen si un vector es (0, 0, 0): no tiene dirección. Jaccard y Hamming solo se calculan con números 0 o 1.
+        </p>
+      </section>
+
+      <!-- 4. Bolas unitarias -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">4 · Qué significa "distancia 1"</h2>
+        <p class="mt-4 leading-relaxed text-ink-dim">
+          Cada forma de abajo reúne todos los puntos que están a distancia 1 del centro, según una fórmula. Si la fórmula cambia, la forma
+          cambia, y con ella qué fragmentos quedan "cerca". Mueve el deslizador y mira cómo se transforma.
+        </p>
+        <div class="panel mt-6 grid items-center gap-6 md:grid-cols-2 p-5! md:p-7!">
+          <svg id="ball-svg" viewBox="-1.4 -1.4 2.8 2.8" class="mx-auto w-full max-w-[300px]" role="img" aria-labelledby="ball-title">
+            <title id="ball-title">Forma de los puntos que están a distancia 1 del centro, según el valor de p</title>
+            <line class="ball-axis" x1="-1.3" y1="0" x2="1.3" y2="0" />
+            <line class="ball-axis" x1="0" y1="-1.3" x2="0" y2="1.3" />
+            <path id="ball-ref1" class="ball-ref" d="" />
+            <path id="ball-ref2" class="ball-ref" d="" />
+            <path id="ball-main" class="ball-main" d="" />
+          </svg>
+          <div>
+            <div class="flex items-baseline justify-between">
+              <label for="ball-p" class="text-sm font-medium text-ink">Valor de p</label>
+              <output id="ball-label" class="font-mono text-xs text-ink-dim">p = 1</output>
+            </div>
+            <input id="ball-p" type="range" min="1" max="8" step="0.5" value="1" class="mt-3" />
+            <ul class="mt-5 space-y-2 text-sm leading-relaxed text-ink-dim">
+              <li><b class="text-ink">p = 1:</b> un rombo. Es la distancia Manhattan.</li>
+              <li><b class="text-ink">p = 2:</b> un círculo. Es la distancia euclidiana.</li>
+              <li><b class="text-ink">p grande:</b> se acerca a un cuadrado. Es la distancia Chebyshev.</li>
+            </ul>
+            <p class="mt-4 text-xs text-ink-faint">Las líneas punteadas son las referencias de p = 1 y p = 2.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Cuál usar -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">5 · Cuál usar, y cuándo</h2>
+        <div class="panel mt-6 overflow-x-auto p-5!">
+          <table class="w-full min-w-[640px] text-left text-sm">
+            <thead class="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-faint">
+              <tr class="border-b border-line">
+                <th scope="col" class="py-2 pr-4 font-normal">Fórmula</th>
+                <th scope="col" class="py-2 pr-4 font-normal">Qué mide</th>
+                <th scope="col" class="py-2 pr-4 font-normal">Cuándo se usa</th>
+                <th scope="col" class="py-2 font-normal">En RAG</th>
+              </tr>
+            </thead>
+            <tbody class="align-top text-ink-dim">
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Coseno</th>
+                <td class="py-3 pr-4">El ángulo entre los vectores.</td>
+                <td class="py-3 pr-4">Cuando importa de qué trata el texto, no cuánto texto es.</td>
+                <td class="py-3">Lo más usado. Muchos modelos lo recomiendan.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Producto punto</th>
+                <td class="py-3 pr-4">Dirección y tamaño juntos.</td>
+                <td class="py-3 pr-4">Con vectores normalizados da lo mismo que el coseno y es más rápido de calcular.</td>
+                <td class="py-3">Muy común en bases vectoriales.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Euclidiana</th>
+                <td class="py-3 pr-4">La distancia en línea recta entre las puntas.</td>
+                <td class="py-3 pr-4">Cuando el tamaño también importa.</td>
+                <td class="py-3">Disponible en casi todas las bases vectoriales.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Manhattan</th>
+                <td class="py-3 pr-4">La suma de las diferencias en cada dimensión.</td>
+                <td class="py-3 pr-4">Cuando no quieres que una sola diferencia muy grande domine.</td>
+                <td class="py-3">Poco común con embeddings densos.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Chebyshev</th>
+                <td class="py-3 pr-4">La mayor diferencia en una sola dimensión.</td>
+                <td class="py-3 pr-4">Cuando ninguna dimensión debe estar muy lejos.</td>
+                <td class="py-3">Poco común en RAG.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Angular</th>
+                <td class="py-3 pr-4">El ángulo, en radianes.</td>
+                <td class="py-3 pr-4">Cuando necesitas una distancia que cumpla todas las reglas matemáticas, por ejemplo para agrupar.</td>
+                <td class="py-3">Útil para agrupar fragmentos similares.</td>
+              </tr>
+              <tr class="border-b border-line">
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Jaccard</th>
+                <td class="py-3 pr-4">Qué parte de los elementos comparten dos conjuntos.</td>
+                <td class="py-3 pr-4">Búsqueda por palabras o etiquetas exactas, no por significado.</td>
+                <td class="py-3">Búsqueda por palabras clave.</td>
+              </tr>
+              <tr>
+                <th scope="row" class="py-3 pr-4 font-medium text-ink">Hamming</th>
+                <td class="py-3 pr-4">Cuántos bits (0 o 1) son diferentes.</td>
+                <td class="py-3 pr-4">Vectores binarios, muy comprimidos, que se comparan rápido.</td>
+                <td class="py-3">Búsquedas muy rápidas con vectores binarios.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6. Por qué coinciden -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">6 · Por qué algunas dan el mismo orden</h2>
+        <p class="mt-4 leading-relaxed text-ink-dim">
+          Si ambos vectores tienen longitud 1, la distancia euclidiana y el coseno se relacionan así: la distancia al cuadrado es
+          2 − 2 × coseno. Si el coseno sube, la distancia baja. Por eso, con vectores normalizados, dan la misma lista de resultados aunque
+          sus números sean distintos. Lo mismo ocurre con el producto punto y la angular.
+        </p>
+      </section>
+
+      <!-- 7. En la práctica -->
+      <section class="mt-16">
+        <h2 class="text-2xl font-bold md:text-3xl">7 · En la práctica</h2>
+        <ul class="mt-6 space-y-3 leading-relaxed text-ink-dim">
+          <li>• <b class="text-ink">Empieza con el coseno.</b> Es la opción segura para comparar textos.</li>
+          <li>• <b class="text-ink">Revisa la documentación de tu modelo de embeddings.</b> Muchos indican qué métrica usar.</li>
+          <li>• <b class="text-ink">Elige la métrica al crear el índice</b> de la base vectorial. Cambiarla después casi siempre obliga a reconstruirlo.</li>
+          <li>• <b class="text-ink">Prueba con preguntas reales.</b> Ninguna métrica gana siempre; compara los resultados con lo que esperarías.</li>
+        </ul>
+      </section>
+
+      <div class="mt-16 border-t border-line pt-8 text-sm text-ink-faint">
+        <p>
+          Las fórmulas son las mismas que usan los modelos reales. Los números de la demo del recorrido vienen de un modelo didáctico de 8
+          dimensiones.
+        </p>
+        <p class="mt-4">
+          <a href="index.html#proximidad" class="text-ink-dim transition-colors hover:text-acid">← Volver a la sección 05 del recorrido</a>
+        </p>
+      </div>
+    </main>
+
+    <script type="module" src="/src/metricas.ts"></script>
+  </body>
+</html>
