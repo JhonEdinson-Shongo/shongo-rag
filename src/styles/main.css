@@ -64,10 +64,15 @@
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
-/* Respaldos con las mismas métricas que las fuentes reales (medidas en shongo-memoria):
-   mientras cargan las fuentes web, el texto ocupa el mismo espacio y no hay salto de diseño. */
+/* Respaldos con las mismas medidas que las fuentes reales: mientras cargan las fuentes web, el texto ocupa
+   el mismo espacio y no hay salto de diseño. size-adjust = ancho de la fuente real / ancho del respaldo,
+   medido con los textos de la página; ascent y descent se dividen por ese valor para conservar la altura.
+   Syne cambia mucho de ancho según el peso: la 800 (titular de la portada) es ~1,45 veces más ancha que
+   Arial Black y la 700 (títulos de sección y de metricas.html) mide casi lo mismo. Por eso hay un respaldo
+   por peso. Si cambias un título a otro peso o a otra fuente, vuelve a medir. */
 @font-face {
   font-family: 'Syne Fallback';
+  font-weight: 800;
   src: local('Arial Black'), local('Arial-Black'), local('ArialMT-Black');
   size-adjust: 149%;
   ascent-override: 62.4%;
@@ -75,20 +80,29 @@
   line-gap-override: 0%;
 }
 @font-face {
+  font-family: 'Syne Fallback';
+  font-weight: 700;
+  src: local('Arial Black'), local('Arial-Black'), local('ArialMT-Black');
+  size-adjust: 98%;
+  ascent-override: 94.9%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
+@font-face {
   font-family: 'Space Grotesk Fallback';
   src: local('Arial'), local('ArialMT'), local('Helvetica');
-  size-adjust: 109%;
-  ascent-override: 89.9%;
-  descent-override: 26.6%;
+  size-adjust: 107.3%;
+  ascent-override: 91.3%;
+  descent-override: 27%;
   line-gap-override: 0%;
 }
 @font-face {
   font-family: 'Instrument Serif Fallback';
   font-style: italic;
   src: local('Georgia Italic'), local('Georgia-Italic');
-  size-adjust: 81.4%;
-  ascent-override: 121.6%;
-  descent-override: 38.1%;
+  size-adjust: 78.6%;
+  ascent-override: 125.9%;
+  descent-override: 39.5%;
   line-gap-override: 0%;
 }
 

@@ -206,7 +206,8 @@ npm run preview   # lo sirve tal como quedará publicado
 - **Datos estructurados:** `WebSite` y `TechArticle`.
 - **Imagen para redes:** `public/og-image.png` (1200×630), tomada de la portada.
 - **Fuentes propias** (`@fontsource`, solo caracteres latinos) con respaldo ajustado a las mismas medidas, para que el texto no salte al cargar.
-- **Lighthouse (build local):** celular: rendimiento 96, LCP 2.2 s, CLS 0.009, SEO 100, accesibilidad 100. Escritorio: rendimiento 100, CLS 0.011.
+- **Lighthouse (sitio publicado, inicio):** celular: rendimiento 100, LCP 1.3 s, CLS 0; escritorio: rendimiento 99, LCP 0.7 s. Accesibilidad, buenas prácticas y SEO en 100 en ambos. `metricas.html` queda con CLS 0.002.
+- **Respaldos de fuentes medidos por peso:** Syne 800 y Syne 700 tienen anchos muy distintos, así que cada una tiene su propio respaldo (`src/styles/main.css`). Sin eso, el título de `metricas.html` se partía en más líneas mientras cargaba la fuente y la página saltaba (CLS 0.207).
 - Envía `sitemap.xml` en [Google Search Console](https://search.google.com/search-console) y pide la indexación de la URL principal. Google puede tardar días en mostrar el sitio.
 
 ## Notas para producción
