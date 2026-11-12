@@ -747,6 +747,27 @@
 #bg.is-on {
   opacity: 0.9;
 }
+/* Velo de lectura: entre la red (z 0) y el contenido (z 10). Apaga la franja central, donde vive
+   el texto, y deja la red viva en los bordes. Usa el color del fondo: sirve igual en ambos modos. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 46% 80% at 50% 50%,
+    color-mix(in srgb, var(--color-ground) 72%, transparent) 0%,
+    color-mix(in srgb, var(--color-ground) 45%, transparent) 60%,
+    transparent 100%
+  );
+}
+/* En móvil el texto ocupa todo el ancho: un velo parejo. */
+@media (max-width: 759px) {
+  body::before {
+    background: color-mix(in srgb, var(--color-ground) 55%, transparent);
+  }
+}
 .glow {
   position: relative;
   isolation: isolate;
@@ -1030,6 +1051,7 @@ html[data-theme='light'][data-contrast='high'] {
 
 /* Modo lectura: sin fondos, brillos, 3D ni barras de progreso. Columnas de lectura más angostas. */
 html[data-reading='on'] #bg,
+html[data-reading='on'] body::before,
 html[data-reading='on'] #progress,
 html[data-reading='on'] #space,
 html[data-reading='on'] aside[aria-label='Progreso'],
@@ -1064,7 +1086,8 @@ html[data-motion='reduce'] *::after {
   transition: none !important;
   scroll-behavior: auto !important;
 }
-html[data-motion='reduce'] #bg {
+html[data-motion='reduce'] #bg,
+html[data-motion='reduce'] body::before {
   display: none !important;
 }
 
